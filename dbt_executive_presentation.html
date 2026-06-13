@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>From Scattered Operational Data to a Trusted Analytics Layer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --surface2:  #21262d;
+    --border:    #30363d;
+    --accent:    #58a6ff;
+    --accent2:   #3fb950;
+    --warn:      #f0883e;
+    --danger:    #f85149;
+    --muted:     #8b949e;
+    --text:      #e6edf3;
+    --text-dim:  #c9d1d9;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* ── SLIDE CONTAINER ── */
+  #deck {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 64px 80px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  .slide.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* ── PROGRESS BAR ── */
+  #progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 3px;
+    background: var(--accent);
+    transition: width 0.4s ease;
+    z-index: 100;
+  }
+
+  /* ── SLIDE COUNTER ── */
+  #counter {
+    position: fixed;
+    bottom: 28px;
+    right: 40px;
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    z-index: 100;
+  }
+
+  /* ── NAV ARROWS ── */
+  .nav-btn {
+    position: fixed;
+    bottom: 20px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    z-index: 100;
+    transition: background 0.2s;
+  }
+  .nav-btn:hover { background: var(--surface); }
+  #prev-btn { left: 40px; }
+  #next-btn { left: 120px; }
+
+  /* ── SLIDE NUMBER DOTS ── */
+  #dots {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    z-index: 100;
+  }
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.3s, transform 0.3s;
+    cursor: pointer;
+  }
+  .dot.active { background: var(--accent); transform: scale(1.4); }
+
+  /* ── TYPOGRAPHY ── */
+  .slide-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+    align-self: flex-start;
+  }
+  h1 { font-size: clamp(32px, 4.5vw, 56px); font-weight: 700; line-height: 1.15; color: var(--text); }
+  h2 { font-size: clamp(24px, 3vw, 38px); font-weight: 700; line-height: 1.2; color: var(--text); margin-bottom: 32px; align-self: flex-start; }
+  h3 { font-size: clamp(15px, 1.6vw, 20px); font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  p  { font-size: clamp(14px, 1.4vw, 18px); color: var(--text-dim); line-height: 1.7; }
+  .subtitle { font-size: clamp(16px, 1.8vw, 22px); color: var(--muted); margin-top: 16px; line-height: 1.5; }
+  .caption { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  /* ── LAYOUT HELPERS ── */
+  .full-width { width: 100%; }
+  .cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; width: 100%; }
+  .cols-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; width: 100%; }
+  .cols-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; width: 100%; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px 28px;
+  }
+  .card.accent-border { border-color: var(--accent); }
+  .card.warn-border   { border-color: var(--warn); }
+  .card.danger-border { border-color: var(--danger); }
+  .card.green-border  { border-color: var(--accent2); }
+
+  /* ── BIG NUMBERS ── */
+  .big-num {
+    font-size: clamp(36px, 4vw, 54px);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .big-num.blue   { color: var(--accent); }
+  .big-num.green  { color: var(--accent2); }
+  .big-num.orange { color: var(--warn); }
+  .big-num.red    { color: var(--danger); }
+  .num-label { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+  /* ── COMPARISON ROW ── */
+  .compare {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    padding: 18px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 12px;
+  }
+  .compare-bad  { border-left: 4px solid var(--danger); }
+  .compare-good { border-left: 4px solid var(--accent2); }
+  .compare-icon { font-size: 20px; flex-shrink: 0; }
+  .compare-text { font-size: clamp(13px, 1.3vw, 16px); color: var(--text-dim); }
+  .compare-text strong { color: var(--text); }
+
+  /* ── CODE BLOCK ── */
+  .code-block {
+    background: #010409;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 22px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: clamp(11px, 1.1vw, 14px);
+    color: #79c0ff;
+    line-height: 1.65;
+    white-space: pre;
+    overflow-x: auto;
+    width: 100%;
+  }
+  .code-block .comment { color: #8b949e; }
+  .code-block .keyword { color: #ff7b72; }
+  .code-block .string  { color: #a5d6ff; }
+  .code-block .bad     { color: var(--danger); }
+  .code-block .good    { color: var(--accent2); }
+
+  /* ── BEFORE / AFTER ── */
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+  }
+  .before-after .side {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+  }
+  .before-after .side.before { border-top: 3px solid var(--danger); }
+  .before-after .side.after  { border-top: 3px solid var(--accent2); }
+  .side-label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 14px; }
+  .before-after .before .side-label { color: var(--danger); }
+  .before-after .after  .side-label { color: var(--accent2); }
+  .side-item { font-size: clamp(12px, 1.2vw, 15px); color: var(--text-dim); margin-bottom: 10px; display: flex; gap: 8px; }
+  .side-item::before { flex-shrink: 0; }
+  .side.before .side-item::before { content: "✗"; color: var(--danger); }
+  .side.after  .side-item::before { content: "✓"; color: var(--accent2); }
+
+  /* ── PIPELINE DIAGRAM ── */
+  .pipeline {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    width: 100%;
+    margin-top: 8px;
+  }
+  .pipe-step {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    position: relative;
+  }
+  .pipe-step:first-child { border-radius: 10px 0 0 10px; }
+  .pipe-step:last-child  { border-radius: 0 10px 10px 0; border-right: 1px solid var(--border); }
+  .pipe-step + .pipe-step { border-left: none; }
+  .pipe-step::after {
+    content: "→";
+    position: absolute;
+    right: -13px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent);
+    font-size: 18px;
+    z-index: 1;
+    background: var(--bg);
+    padding: 0 2px;
+  }
+  .pipe-step:last-child::after { display: none; }
+  .pipe-icon { font-size: 26px; margin-bottom: 10px; }
+  .pipe-name { font-size: 13px; font-weight: 700; color: var(--text); letter-spacing: 0.02em; }
+  .pipe-desc { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .pipe-count { font-size: 11px; color: var(--accent); margin-top: 8px; font-weight: 600; }
+  .pipe-step.highlight { border-color: var(--accent); background: rgba(88,166,255,0.06); }
+  .pipe-step.end-highlight { border-color: var(--accent2); background: rgba(63,185,80,0.06); }
+
+  /* ── TABLE ── */
+  .data-table { width: 100%; border-collapse: collapse; font-size: clamp(11px, 1.1vw, 14px); }
+  .data-table th { background: var(--surface2); color: var(--muted); font-weight: 600; text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .data-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text-dim); vertical-align: top; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table td.num { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .data-table td.green { color: var(--accent2); font-weight: 700; }
+  .data-table td.red   { color: var(--danger); font-weight: 700; }
+  .data-table td.orange{ color: var(--warn); font-weight: 700; }
+  .data-table td.blue  { color: var(--accent); font-weight: 700; }
+  .table-wrap { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+
+  /* ── BADGE ── */
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
+  .badge.green  { background: rgba(63,185,80,0.15); color: var(--accent2); border: 1px solid rgba(63,185,80,0.3); }
+  .badge.blue   { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.3); }
+  .badge.orange { background: rgba(240,136,62,0.15); color: var(--warn); border: 1px solid rgba(240,136,62,0.3); }
+  .badge.red    { background: rgba(248,81,73,0.15); color: var(--danger); border: 1px solid rgba(248,81,73,0.3); }
+
+  /* ── BENEFITS GRID ── */
+  .benefit-item {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .benefit-icon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
+  .benefit-text h3 { font-size: 14px; margin-bottom: 4px; }
+  .benefit-text p  { font-size: 12px; line-height: 1.5; color: var(--muted); }
+
+  /* ── TITLE SLIDE ── */
+  #slide-1 { background: radial-gradient(ellipse at 60% 40%, rgba(88,166,255,0.08) 0%, transparent 65%), var(--bg); }
+  #slide-1 h1 { font-size: clamp(32px, 5vw, 64px); text-align: center; margin-top: 12px; }
+  #slide-1 .subtitle { text-align: center; max-width: 680px; }
+  .title-meta { display: flex; gap: 20px; margin-top: 32px; flex-wrap: wrap; justify-content: center; }
+  .title-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 18px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .title-chip span { color: var(--text); font-weight: 600; }
+
+  /* ── PROGRESS BAR METER ── */
+  .meter-wrap { width: 100%; background: var(--surface2); border-radius: 6px; height: 10px; overflow: hidden; margin-top: 6px; }
+  .meter-fill { height: 100%; border-radius: 6px; transition: width 1s ease; }
+  .meter-wrap.blue .meter-fill  { background: var(--accent); }
+  .meter-wrap.green .meter-fill { background: var(--accent2); }
+  .meter-wrap.red .meter-fill   { background: var(--danger); }
+  .meter-wrap.orange .meter-fill{ background: var(--warn); }
+
+  /* ── QUOTE ── */
+  .blockquote {
+    border-left: 3px solid var(--accent);
+    padding: 16px 24px;
+    background: var(--surface);
+    border-radius: 0 8px 8px 0;
+    width: 100%;
+    font-size: clamp(14px, 1.4vw, 18px);
+    color: var(--text-dim);
+    font-style: italic;
+    line-height: 1.65;
+  }
+  .blockquote .src { margin-top: 12px; font-style: normal; font-size: 12px; color: var(--muted); }
+
+  /* ── STEP LIST ── */
+  .step-list { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+  .step-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .step-num {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--accent);
+    color: var(--bg);
+    font-weight: 800;
+    font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-content h3 { font-size: 14px; margin-bottom: 3px; }
+  .step-content p  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+<div id="dots"></div>
+<button class="nav-btn" id="prev-btn">← Prev</button>
+<button class="nav-btn" id="next-btn">Next →</button>
+<div id="counter"></div>
+
+<div id="deck">
+
+  <!-- ═══════════════════════════════ SLIDE 1 — TITLE ═══════════════════════════════ -->
+  <section class="slide" id="slide-1">
+    <div class="slide-label">Lightspeed Data Engineering · Proof of Concept</div>
+    <h1>From Scattered Operational Data<br>to a Trusted Analytics Layer</h1>
+    <p class="subtitle">How a dbt architectural approach solves inconsistent KPIs, undocumented business logic, and untrustworthy dashboards — demonstrated on one company database, generalizable to all.</p>
+    <div class="title-meta">
+      <div class="title-chip">Database: <span>odoo_earth (PostgreSQL)</span></div>
+      <div class="title-chip">Tables explored: <span>1,027</span></div>
+      <div class="title-chip">Models built: <span>30 (staging → intermediate → mart)</span></div>
+      <div class="title-chip">Tests: <span>171 declared · 32 PASS · 0 ERROR</span></div>
+      <div class="title-chip">Dashboard panels: <span>42 (all on validated mart)</span></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ SLIDE 2 — SITUATION ═══════════════════════════════ -->
+  <section class="slide" id="slide-2">
+    <div class="slide-label">The Situation</div>
+    <h2>The Company Has Multiple Operational Databases</h2>
+    <div class="cols-2" style="align-items:start; margin-bottom:24px;">
+      <div>
+        <p style="margin-bottom:20px;">Each system of record serves a different operational need. Dashboards and reports are built by querying these raw operational tables directly — different analysts, different queries, for the same business questions.</p>
+        <p>The result is a fragmented landscape where the same metric produces different numbers depending on who built the report and which table they queried.</p>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card accent-border">
+          <h3 style="color:var(--accent); font-size:14px; margin-bottom:8px;">Odoo ERP — <code style="font-size:12px;">odoo_earth</code></h3>
+          <p style="font-size:13px;">Field operations, work orders, technician dispatch — 1,027 tables, 64% empty</p>
+        </div>
+        <div class="card" style="border-color:var(--muted);">
+          <h3 style="color:var(--text-dim); font-size:14px; margin-bottom:8px;">Creatio CRM</h3>
+          <p style="font-size:13px;">All subscriber accounts, CC tickets, installation orders — external system</p>
+        </div>
+        <div class="card" style="border-color:var(--muted);">
+          <h3 style="color:var(--text-dim); font-size:14px; margin-bottom:8px;">FMS (Fiber Management System)</h3>
+          <p style="font-size:13px;">Contracts, network topology, billing, subscriber IDs — external system</p>
+        </div>
+        <div class="card" style="border-color:var(--muted);">
+          <h3 style="color:var(--text-dim); font-size:14px; margin-bottom:8px;">HRIS</h3>
+          <p style="font-size:13px;">Employee records, org chart, payroll — external system</p>
+        </div>
+      </div>
+    </div>
+    <div class="blockquote">
+      Odoo is not a standalone ERP. It is an operational middleware — dispatching field teams, logging work orders, and syncing to FMS and Creatio. Querying it without understanding its role produces structurally incomplete answers.
+      <div class="src">— Finding: docs/dbt_architecture/cross_system_architecture.md</div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ SLIDE 3 — SAME DB, DIFFERENT NUMBERS ═══════════════════════════════ -->
+  <section class="slide" id="slide-3">
+    <div class="slide-label">Problem 1 — Inconsistent KPIs</div>
+    <h2>Same Database. Different Numbers. Same Question.</h2>
+    <div class="cols-2" style="align-items:start;">
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div class="card danger-border">
+          <h3 style="font-size:13px; color:var(--danger); margin-bottom:10px;">Subscriber Count — How many customers do we have?</h3>
+          <div style="display:flex; gap:24px; align-items:flex-end;">
+            <div>
+              <div class="big-num red">27,115</div>
+              <div class="num-label">Raw <code>SELECT COUNT(*)<br>FROM res_partner</code></div>
+            </div>
+            <div style="font-size:22px; color:var(--muted); padding-bottom:14px;">vs</div>
+            <div>
+              <div class="big-num green">19,194</div>
+              <div class="num-label">Real subscribers<br>(<code>sap_user = TRUE</code>)</div>
+            </div>
+          </div>
+          <p style="font-size:12px; color:var(--muted); margin-top:12px;">The remainder: 5,562 unclassified contacts, 184 zone contractors, 94 internal staff, 63 vendors. Raw count is 41% inflated.</p>
+        </div>
+        <div class="card danger-border">
+          <h3 style="font-size:13px; color:var(--danger); margin-bottom:10px;">Helpdesk Subscriber Links — Which customer raised each ticket?</h3>
+          <div class="meter-wrap red" style="margin-bottom:8px;"><div class="meter-fill" style="width:1.6%;"></div></div>
+          <p style="font-size:13px; color:var(--text-dim);"><strong style="color:var(--danger);">1.6%</strong> — Join on <code>partner_id</code> succeeds for only 105 of 6,725 tickets. The CC team identifies subscribers via <code>contract_sap_id</code> (66.8%) — a field the dashboard query never used.</p>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div class="card danger-border">
+          <h3 style="font-size:13px; color:var(--danger); margin-bottom:10px;">Monthly Users Served — Are we growing?</h3>
+          <div style="display:flex; gap:8px; align-items:flex-end; margin-bottom:10px;">
+            <div style="text-align:center;">
+              <div class="big-num red" style="font-size:28px;">2.7%</div>
+              <div class="num-label">Feb 2026</div>
+            </div>
+            <div style="font-size:30px; color:var(--warn); margin-bottom:8px;">→</div>
+            <div style="text-align:center;">
+              <div class="big-num orange" style="font-size:28px;">73.6%</div>
+              <div class="num-label">Apr 2026</div>
+            </div>
+          </div>
+          <p style="font-size:12px; color:var(--muted);">This "growth" is a data-entry pattern change — not a business trend. The query used a sparse FK that analysts started filling more consistently. The metric is meaningless as a trend.</p>
+        </div>
+        <div class="card danger-border">
+          <h3 style="font-size:13px; color:var(--danger); margin-bottom:10px;"><code>sap_id</code> — Four Systems, One Column Name</h3>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="font-size:12px; display:flex; gap:8px; align-items:center;"><span style="color:var(--danger);">✗</span> <code>helpdesk_ticket.sap_id</code> → Creatio CRM UUID (36 chars)</div>
+            <div style="font-size:12px; display:flex; gap:8px; align-items:center;"><span style="color:var(--danger);">✗</span> <code>maintenance_request.sap_id</code> → Creatio install UUID</div>
+            <div style="font-size:12px; display:flex; gap:8px; align-items:center;"><span style="color:var(--danger);">✗</span> <code>res_partner.sap_id</code> → FMS 7-digit numeric ID</div>
+            <div style="font-size:12px; display:flex; gap:8px; align-items:center;"><span style="color:var(--danger);">✗</span> <code>res_zone.sap_id</code> → FMS zone code (e.g. <code>FBG0462-3</code>)</div>
+          </div>
+          <p style="font-size:12px; color:var(--muted); margin-top:10px;">Joining any two of these on <code>sap_id = sap_id</code> returns zero rows — silently, with no error.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ SLIDE 4 — SILENT TRAPS ═══════════════════════════════ -->
+  <section class="slide" id="slide-4">
+    <div class="slide-label">Problem 2 — Hidden Data Traps</div>
+    <h2>Columns That Look Right and Produce Wrong Answers</h2>
+    <div class="cols-3">
+      <div class="card danger-border">
+        <div style="font-size:28px; margin-bottom:12px;">💰</div>
+        <h3 style="margin-bottom:8px;">Cash Collection — Always Zero</h3>
+        <p style="font-size:13px; color:var(--text-dim); margin-bottom:12px;"><code>maintenance_request.collection</code> is a boolean column for cash collected. Probe result:</p>
+        <div class="big-num red" style="font-size:36px;">0 / 10,554</div>
+        <p style="font-size:12px; color:var(--muted); margin-top:8px;">Every row is <code>FALSE</code>. The column was never activated. The correct field is <code>collected_amount &gt; 0</code> — which shows <strong style="color:var(--accent2);">2,551 jobs collected cash</strong>. A dashboard on the boolean shows zero collection company-wide.</p>
+      </div>
+      <div class="card danger-border">
+        <div style="font-size:28px; margin-bottom:12px;">📊</div>
+        <h3 style="margin-bottom:8px;">SLA Compliance — 100% by Default</h3>
+        <p style="font-size:13px; color:var(--text-dim); margin-bottom:12px;">The SLA module tables exist in the schema. Row counts from live probe:</p>
+        <div style="display:flex; gap:16px;">
+          <div>
+            <div class="big-num red" style="font-size:30px;">0</div>
+            <div class="num-label"><code>helpdesk_sla</code> rows</div>
+          </div>
+          <div>
+            <div class="big-num red" style="font-size:30px;">0</div>
+            <div class="num-label"><code>sla_status</code> rows</div>
+          </div>
+        </div>
+        <p style="font-size:12px; color:var(--muted); margin-top:10px;">Module never configured → Odoo defaults <code>is_sla_reached = TRUE</code> on all 6,725 tickets. Any SLA dashboard would report <strong style="color:var(--danger);">100% compliance</strong> — a meaningless artifact.</p>
+      </div>
+      <div class="card danger-border">
+        <div style="font-size:28px; margin-bottom:12px;">📍</div>
+        <h3 style="margin-bottom:8px;">Placeholder Zones — Ghost Geography</h3>
+        <p style="font-size:13px; color:var(--text-dim); margin-bottom:12px;">12 zones with codes ending <code>8888</code> or <code>8822</code> are internal placeholders for uncommissioned network areas:</p>
+        <div class="big-num orange" style="font-size:36px;">1,775</div>
+        <p style="font-size:12px; color:var(--muted); margin-top:8px;">work orders (16.8% of total) in placeholder zones — including 1,496 completed installations. Zone-level KPIs mix real and ghost geography without this flag, making regional performance analysis incorrect.</p>
+      </div>
+    </div>
+    <div style="margin-top:20px; display:flex; gap:16px; width:100%;">
+      <div class="card" style="flex:1; border-color:var(--warn);">
+        <div style="display:flex; gap:12px; align-items:flex-start;">
+          <div style="font-size:22px;">🔍</div>
+          <div>
+            <h3 style="font-size:13px; margin-bottom:6px;">Description Field — Structured Data Treated as Free Text</h3>
+            <p style="font-size:12px; color:var(--muted);">The <code>maintenance_request.description</code> field was excluded as "unstructured free text." A probe revealed it contains a structured CC dispatch template with Zone, FAT node, and GPS coordinates. Excluding it loses network attribution for <strong style="color:var(--warn);">75.3% of all work orders</strong>. After parsing: <strong style="color:var(--accent2);">96.7% FAT/Zone coverage</strong>.</p>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="flex:1; border-color:var(--warn);">
+        <div style="display:flex; gap:12px; align-items:flex-start;">
+          <div style="font-size:22px;">👤</div>
+          <div>
+            <h3 style="font-size:13px; margin-bottom:6px;">HRIS Employee Codes — 78.5% Are a Python Import Bug</h3>
+            <p style="font-size:12px; color:var(--muted);"><code>hr_employee.emp_id</code> should link employees to the HR system. Probe: <strong style="color:var(--warn);">2,523 of 3,215 employees</strong> have values like <code>False1</code>, <code>False2</code> — Python <code>False</code> imported as string. Only <strong style="color:var(--accent2);">692 (21.5%)</strong> have genuine HRIS IDs. Cross-system HR analytics cover fewer than 1 in 5 staff.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ SLIDE 5 — SCATTERED LOGIC ═══════════════════════════════ -->
+  <section class="slide" id="slide-5">
+    <div class="slide-label">Problem 3 — Scattered Business Logic</div>
+    <h2>The Same Rule, Written Four Different Ways</h2>
+    <div class="cols-2" style="align-items:start;">
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <p style="margin-bottom:4px;">The existing Grafana SQL defines "completed work orders" differently in each query block. A single change in business definition — for example, excluding same-day cancellations — requires finding and editing every dashboard independently. With no inventory of queries, some will be missed.</p>
+        <div class="compare compare-bad">
+          <div class="compare-icon">✗</div>
+          <div class="compare-text">Dashboard A: <strong><code>WHERE stage_id = 9</code></strong> — hardcoded ID, breaks if stages reorganize</div>
+        </div>
+        <div class="compare compare-bad">
+          <div class="compare-icon">✗</div>
+          <div class="compare-text">Dashboard B: <strong><code>WHERE stage_type = 'done'</code></strong> — different column, same intent</div>
+        </div>
+        <div class="compare compare-bad">
+          <div class="compare-icon">✗</div>
+          <div class="compare-text">Dashboard C: join to <code>maintenance_stage</code> on name — third implementation of the same rule</div>
+        </div>
+        <div class="compare compare-bad">
+          <div class="compare-icon">✗</div>
+          <div class="compare-text">Dashboard D: <strong>filter missing</strong> — canceled and failed jobs included in "completed" count</div>
+        </div>
+        <div class="compare compare-bad">
+          <div class="compare-icon">✗</div>
+          <div class="compare-text">One query has a syntax error (<code>AND</code> without <code>WHERE</code>) — it never executed; the result gap was invisible</div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="code-block"><span class="comment">-- Arabic name extraction from description field
+-- (existing raw SQL approach)</span>
+<span class="bad">SUBSTRING(description FROM 'Name:\s*([A-Za-z0-9]+)')</span>
+<span class="comment">
+-- Result: NULL for all Arabic names
+-- Single-line HTML: captures 'Phone Number: Zone: FBG...'
+-- as the customer name
+</span>
+<span class="comment">-- Zone without WHERE clause (syntax error)</span>
+<span class="bad">from res_partner as rp
+left join maintenance_request as mr
+  on mr.partner_id = rp.id
+--where (rp.active is not null ...)
+and mr.task_type = 'maintenance'  -- INVALID</span></div>
+        <div class="card warn-border" style="margin-top:4px;">
+          <h3 style="font-size:13px; margin-bottom:8px;">No Tests. No Grain Check. No Documentation.</h3>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="font-size:12px; color:var(--muted); display:flex; gap:8px;"><span style="color:var(--danger);">✗</span> No check that queries return one row per work order</div>
+            <div style="font-size:12px; color:var(--muted); display:flex; gap:8px;"><span style="color:var(--danger);">✗</span> No NULL-rate documentation per column</div>
+            <div style="font-size:12px; color:var(--muted); display:flex; gap:8px;"><span style="color:var(--danger);">✗</span> No version control on dashboard definitions</div>
+            <div style="font-size:12px; color:var(--muted); display:flex; gap:8px;"><span style="color:var(--danger);">✗</span> No shared vocabulary across query authors</div>
+            <div style="font-size:12px; color:var(--muted); display:flex; gap:8px;"><span style="color:var(--danger);">✗</span> Silent wrong answers look identical to correct ones</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ SLIDE 6 — THE APPROACH ═══════════════════════════════ -->
+  <section class="slide" id="slide-6">
+    <div class="slide-label">The Solution</div>
+    <h2>A Layered dbt Architecture: One Source of Truth</h2>
+    <p style="margin-bottom:28px; align-self:flex-start;">Business logic lives once — in the transformation layer. Every dashboard reads from validated, documented marts. The operational database is never queried for reporting.</p>
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="pipe-icon">🗄️</div>
+        <div class="pipe-name">Raw Sources</div>
+        <div class="pipe-desc">Operational databases: Odoo, FMS, Creatio, HRIS</div>
+        <div class="pipe-count">1,027 tables<br>64% empty</div>
+      </div>
+      <div class="pipe-step highlight">
+        <div class="pipe-icon">🧹</div>
+        <div class="pipe-name">Staging</div>
+        <div class="pipe-desc">Clean names, cast types, rename misleading columns, document every field</div>
+        <div class="pipe-count">26 models<br>100% YAML docs</div>
+      </div>
+      <div class="pipe-step highlight">
+        <div class="pipe-icon">⚙️</div>
+        <div class="pipe-name">Intermediate</div>
+        <div class="pipe-desc">Apply business logic, resolve FKs to names, derive flags, enrich from secondary sources</div>
+        <div class="pipe-count">3 models<br>single-grain each</div>
+      </div>
+      <div class="pipe-step end-highlight">
+        <div class="pipe-icon">📦</div>
+        <div class="pipe-name">Mart</div>
+        <div class="pipe-desc">One row per business entity. Grain-validated. All tests pass. Dashboard-ready.</div>
+        <div class="pipe-count">1 fact table<br>32 tests PASS</div>
+      </div>
+      <div class="pipe-step end-highlight">
+        <div class="pipe-icon">📊</div>
+        <div class="pipe-name">Dashboards</div>
+        <div class="pipe-desc">Grafana, Metabase, or any BI tool — reads mart only, no raw tables</div>
+        <div class="pipe-count">42 panels<br>same fact table</div>
+      </div>
+    </div>
+    <div class="cols-3" style="margin-top:24px;">
+      <div class="card green-border" style="padding:16px 20px;">
+        <h3 style="font-size:13px; margin-bottom:6px; color:var(--accent2);">One KPI = One Definition</h3>
+        <p style="font-size:12px; color:var(--muted);">"Done" is defined once in the staging model. All 42 Grafana panels inherit the same flag. Change it once — every panel updates.</p>
+      </div>
+      <div class="card accent-border" style="padding:16px 20px;">
+        <h3 style="font-size:13px; margin-bottom:6px; color:var(--accent);">Documented & Version-Controlled</h3>
+        <p style="font-size:12px; color:var(--muted);">Every column has a description. Every change is a git commit with author, date, and reason. Lineage is auto-generated.</p>
+      </div>
+      <div class="card" style="padding:16px 20px; border-color:var(--muted);">
+        <h3 style="font-size:13px; margin-bottom:6px;">Test-Enforced Trust</h3>
+        <p style="font-size:12px; color:var(--muted);">171 tests run on every build. A failing test is an alert before it becomes a wrong dashboard. Grain is always validated.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ SLIDE 7 — WHAT WAS BUILT ═══════════════════════════════ -->
+  <section class="slide" id="slide-7">
+    <div class="slide-label">The Sample Proof</div>
+    <h2>What Was Built on One Database in 4 Weeks</h2>
+    <div class="cols-2" style="align-items:start;">
+      <div>
+        <div class="table-wrap" style="margin-bottom:20px;">
+          <table class="data-table">
+            <thead><tr><th>Layer</th><th>Models</th><th>Tests</th></tr></thead>
+            <tbody>
+              <tr><td>Staging (5 domains)</td><td class="num">26</td><td class="num">140</td></tr>
+              <tr><td>Intermediate (field service)</td><td class="num">3</td><td class="num">22</td></tr>
+              <tr><td>Mart (fact table)</td><td class="num">1</td><td class="num">9</td></tr>
+              <tr><td style="font-weight:700;">Total</td><td class="num green">30</td><td class="num green">171</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Domain Staged</th><th>Tables</th><th>Key Entity</th></tr></thead>
+            <tbody>
+              <tr><td>Maintenance Core</td><td class="num">8</td><td>10,554 work orders</td></tr>
+              <tr><td>Helpdesk</td><td class="num">6</td><td>6,725 CC tickets</td></tr>
+              <tr><td>Workflow Tracking</td><td class="num">5</td><td>39,343 action events</td></tr>
+              <tr><td>Network Topology</td><td class="num">3</td><td>170,669 FAT nodes</td></tr>
+              <tr><td>People / Technicians</td><td class="num">4</td><td>3,215 employees</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card green-border">
+          <h3 style="font-size:13px; color:var(--accent2); margin-bottom:10px;">fct_field_service_work_orders</h3>
+          <div class="cols-2" style="gap:12px;">
+            <div>
+              <div class="big-num green" style="font-size:40px;">10,554</div>
+              <div class="num-label">work order rows<br>grain: 1 row = 1 work order</div>
+            </div>
+            <div>
+              <div class="big-num blue" style="font-size:40px;">77</div>
+              <div class="num-label">columns across<br>9 logical groups</div>
+            </div>
+          </div>
+          <div style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap;">
+            <span class="badge green">Grain validated</span>
+            <span class="badge green">0 duplicates</span>
+            <span class="badge green">32 tests PASS</span>
+            <span class="badge green">0 errors</span>
+          </div>
+        </div>
+        <div class="card accent-border">
+          <h3 style="font-size:13px; color:var(--accent); margin-bottom:10px;">Build Test Result</h3>
+          <div style="font-family: monospace; font-size:13px; color: var(--accent2);">
+            ✓ 32 PASS &nbsp; ⚠ 0 WARN &nbsp; ✗ 0 ERROR
+          </div>
+          <p style="font-size:12px; color:var(--muted); margin-top:10px;">Grain check: <code>COUNT(*) = COUNT(DISTINCT maintenance_request_id) = 10,554</code>. No join fanout. No dropped rows. Status flags mutually exclusive: done + canceled + failed + open = 100%.</p>
+        </div>
+        <div class="card" style="border-color:var(--muted); padding:14px 18px;">
+          <p style="font-size:12px; color:var(--muted);"><strong style="color:var(--text);">Infrastructure validation caught a silent bug:</strong> The experimental dbt build engine compiled 4 staging views with <code>WHERE false LIMIT 0</code> — returning zero rows with no errors, making all technician names appear NULL. Systematic grain testing surfaced it immediately. Raw SQL dashboards have no equivalent safety net.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ SLIDE 8 — VALUE CREATED ═══════════════════════════════ -->
+  <section class="slide" id="slide-8">
+    <div class="slide-label">Value Created</div>
+    <h2>Board-Ready KPIs from a Database That Had None</h2>
+    <div class="cols-2" style="align-items:start; gap:24px;">
+      <div>
+        <div class="card green-border" style="margin-bottom:16px;">
+          <h3 style="font-size:13px; color:var(--accent2); margin-bottom:14px;">Network Coverage Recovery — The Flagship Story</h3>
+          <div style="display:flex; gap:20px; align-items:center; margin-bottom:14px;">
+            <div style="text-align:center;">
+              <div class="big-num red" style="font-size:42px;">24.7%</div>
+              <div class="num-label">FAT attribution via FK alone<br>(before dbt enrichment)</div>
+            </div>
+            <div style="font-size:32px; color:var(--accent);">→</div>
+            <div style="text-align:center;">
+              <div class="big-num green" style="font-size:42px;">96.7%</div>
+              <div class="num-label">FAT attribution after<br>description-field parsing</div>
+            </div>
+          </div>
+          <div class="meter-wrap green"><div class="meter-fill" style="width:96.7%;"></div></div>
+          <p style="font-size:12px; color:var(--muted); margin-top:10px;">The <code>description</code> column was excluded as "free text." A probe revealed it contains a structured CC dispatcher template with Zone, FAT node, and GPS coordinates — recoverable at 96.7% for maintenance work orders. The dbt intermediate model parses it. Without the probe-first approach, 75% of field visits would have no geographic attribution.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Field Service KPI</th><th>Value</th></tr></thead>
+            <tbody>
+              <tr><td>Total field work orders</td><td class="blue num">10,554</td></tr>
+              <tr><td>Completed (done)</td><td class="green">5,739 — 54.4%</td></tr>
+              <tr><td>Canceled</td><td class="orange">4,266 — 40.4%</td></tr>
+              <tr><td>Failed (with reason)</td><td class="red">458 — 4.3%</td></tr>
+              <tr><td>Jobs collecting cash</td><td class="num">2,551 (avg 12,405 IQD)</td></tr>
+              <tr><td>Avg dispatch lag (CC → field)</td><td class="green">Median 0.1 hrs</td></tr>
+              <tr><td>Maintenance helpdesk link rate</td><td class="green">99.9%</td></tr>
+              <tr><td>Top failure reason</td><td>Customer: no issue found (700)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:16px; border-color:var(--muted);">
+          <h3 style="font-size:13px; margin-bottom:14px;">42 Grafana Panels Now Read One Fact Table</h3>
+          <div class="cols-2" style="gap:12px;">
+            <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+              <div style="font-size:28px; font-weight:800; color:var(--accent);">9</div>
+              <div style="font-size:11px; color:var(--muted); margin-top:4px;">Dashboard tabs<br>(Overview, Teams, Geography,<br>Tickets, Failures, Timing,<br>Cash, Ops, Executive)</div>
+            </div>
+            <div style="text-align:center; padding:12px; background:var(--surface2); border-radius:8px;">
+              <div style="font-size:28px; font-weight:800; color:var(--accent);">42</div>
+              <div style="font-size:11px; color:var(--muted); margin-top:4px;">Panels — all querying<br><code>fct_field_service_<br>work_orders</code><br>No raw table queries</div>
+            </div>
+          </div>
+        </div>
+        <div class="card accent-border">
+          <h3 style="font-size:13px; color:var(--accent); margin-bottom:12px;">Dispatch Efficiency Signal</h3>
+          <p style="font-size:13px; color:var(--text-dim); margin-bottom:12px;">Failure reason analysis reveals <strong>700 visits</strong> where the customer reported no issue, and <strong>559</strong> where the issue was already resolved by a CC agent before the technician arrived. This is a dispatch optimization opportunity invisible in raw operational queries — surfaced by joining failure reason codes to the fact table in a documented, tested model.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <span class="badge orange">700 — Customer: no issue</span>
+            <span class="badge orange">559 — Resolved by agent</span>
+            <span class="badge orange">513 — Duplicate ticket</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ SLIDE 9 — TRUST MECHANICS ═══════════════════════════════ -->
+  <section class="slide" id="slide-9">
+    <div class="slide-label">Trust Mechanics</div>
+    <h2>Trust Is Proven, Not Claimed</h2>
+    <div class="cols-2" style="align-items:start;">
+      <div class="before-after">
+        <div class="side before">
+          <div class="side-label">Without dbt</div>
+          <div class="side-item">Different analysts define the same metric differently per dashboard</div>
+          <div class="side-item">No check that a join didn't duplicate rows (fanout)</div>
+          <div class="side-item">Silent wrong answers indistinguishable from correct ones</div>
+          <div class="side-item">No NULL-rate tracking — sparse columns look complete</div>
+          <div class="side-item">Data quality issues discovered after a board presentation</div>
+          <div class="side-item">No audit trail: who changed what, when, why</div>
+        </div>
+        <div class="side after">
+          <div class="side-label">With dbt</div>
+          <div class="side-item">Every metric defined once in YAML — shared vocabulary</div>
+          <div class="side-item">Grain test on every mart: COUNT(*) = COUNT(DISTINCT pk)</div>
+          <div class="side-item">171 declarative tests fail loudly before dashboards ship</div>
+          <div class="side-item">Coverage rates documented per column (e.g. FAT 24.7%)</div>
+          <div class="side-item">Data quality gaps flagged as caveats in the mart layer</div>
+          <div class="side-item">Every change is a git commit with full history</div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Test Type</th><th>Example</th><th>Count</th></tr></thead>
+            <tbody>
+              <tr><td><code>unique</code> + <code>not_null</code></td><td>Primary key on every model</td><td class="green">all 30</td></tr>
+              <tr><td><code>accepted_values</code></td><td><code>task_type</code>, <code>stage_type</code> vocabulary</td><td class="num">~40</td></tr>
+              <tr><td><code>relationships</code></td><td>FK integrity across staged models</td><td class="num">~60</td></tr>
+              <tr><td>Warn-severity</td><td>Known sparse FKs: FAT 24.7%, technician 66%</td><td class="orange">documented</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card accent-border">
+          <h3 style="font-size:13px; color:var(--accent); margin-bottom:10px;">Documented Caveats in the Mart</h3>
+          <div style="font-size:12px; color:var(--text-dim); display:flex; flex-direction:column; gap:6px;">
+            <div>✓ <code>active_period_hours</code> — action-log window, NOT on-site duration</div>
+            <div>✓ Cash collection — field-recorded, not reconciled with billing</div>
+            <div>✓ Technician name — 88.5% on maintenance, 45.5% on installation</div>
+            <div>✓ FAT via FK — 24.7% only; description parse recovers to 96.7%</div>
+            <div>✓ SLA: module inactive; all rows show compliant by default</div>
+          </div>
+          <p style="font-size:12px; color:var(--muted); margin-top:10px;">Caveats are not hidden — they are the documentation. A board member who asks "why is technician name missing on some installs?" gets an answer with a number: 45.5% coverage, documented with a probe query.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ SLIDE 10 — FIX ONCE EVERYWHERE ═══════════════════════════════ -->
+  <section class="slide" id="slide-10">
+    <div class="slide-label">The Core Principle</div>
+    <h2>Fix Business Logic Once. It Applies Everywhere.</h2>
+    <div class="cols-2" style="align-items:start; gap:28px;">
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <p>The single most impactful shift: business logic moves from inside dashboard queries to inside transformation models. Change a rule once — rebuild — every downstream consumer reflects the change automatically.</p>
+        <div class="card accent-border">
+          <h3 style="font-size:13px; color:var(--accent); margin-bottom:12px;">Centralized Definitions — Before vs After</h3>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="font-size:12px; padding:8px 12px; background:rgba(248,81,73,0.08); border-radius:6px; border:1px solid rgba(248,81,73,0.2);">
+              <strong style="color:var(--danger);">Before:</strong> "Completed job" = <code>stage_id = 9</code> in Dashboard A, <code>stage_type = 'done'</code> in B, stage name join in C, missing in D. Four queries, four possible answers.
+            </div>
+            <div style="font-size:12px; padding:8px 12px; background:rgba(63,185,80,0.08); border-radius:6px; border:1px solid rgba(63,185,80,0.2);">
+              <strong style="color:var(--accent2);">After:</strong> <code>is_done = TRUE</code> defined in <code>stg_odoo__maintenance_stage.sql</code>. All 42 panels use this column. Change the definition → one file → one rebuild.
+            </div>
+            <div style="font-size:12px; padding:8px 12px; background:rgba(248,81,73,0.08); border-radius:6px; border:1px solid rgba(248,81,73,0.2);">
+              <strong style="color:var(--danger);">Before:</strong> Cash collection = <code>collection = TRUE</code> (always FALSE — 0 results company-wide).
+            </div>
+            <div style="font-size:12px; padding:8px 12px; background:rgba(63,185,80,0.08); border-radius:6px; border:1px solid rgba(63,185,80,0.2);">
+              <strong style="color:var(--accent2);">After:</strong> <code>is_cash_collected = (collected_amount_iqd &gt; 0)</code> — defined once, correctly identifies 2,551 jobs.
+            </div>
+          </div>
+        </div>
+        <div class="card" style="border-color:var(--muted);">
+          <h3 style="font-size:13px; margin-bottom:8px;">The Rollout Pattern — 5 Steps Per Source</h3>
+          <div style="font-size:12px; color:var(--text-dim); display:flex; flex-direction:column; gap:5px;">
+            <div><strong style="color:var(--accent);">1. Probe</strong> — systematic SQL probes against the raw DB; classify tables; document fill rates</div>
+            <div><strong style="color:var(--accent);">2. Stage</strong> — clean models per table; cast types; rename misleading columns; add YAML docs</div>
+            <div><strong style="color:var(--accent);">3. Integrate</strong> — intermediate models apply business logic; resolve FKs; derive flags</div>
+            <div><strong style="color:var(--accent);">4. Mart</strong> — one fact/dimension per domain; grain validated; tests pass before publish</div>
+            <div><strong style="color:var(--accent);">5. Dashboard</strong> — BI tool reads mart only; KPI definitions live in dbt, not in Grafana</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card green-border">
+          <h3 style="font-size:13px; color:var(--accent2); margin-bottom:12px;">Next Domains Already Scoped</h3>
+          <div class="table-wrap" style="border:none; border-radius:0;">
+            <table class="data-table" style="font-size:12px;">
+              <thead><tr><th>Domain</th><th>Key Table</th><th>Unlocks</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td>Materials / Cost</td><td><code>stock_valuation_layer</code></td><td>Real cost per job</td><td class="orange">Deferred</td></tr>
+                <tr><td>Finance</td><td><code>account_move_line</code> (85,821 rows)</td><td>Revenue recognition</td><td class="orange">Scoped</td></tr>
+                <tr><td>HR Attendance</td><td><code>hr_attendance_zk_temp</code> (141,601)</td><td>Technician attendance</td><td class="red">Blocker: 92% unprocessed</td></tr>
+                <tr><td>Inventory</td><td><code>stock_move</code>, <code>approval_request</code></td><td>Material issuance</td><td class="orange">Needs bridge</td></tr>
+                <tr><td>CRM Pipeline</td><td><code>crm_lead</code> (7,375 rows)</td><td>Install conversion</td><td class="orange">Not yet staged</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="blockquote" style="font-size:14px;">
+          The probe-first discipline is what makes the pattern trustworthy. Modeling without probing produces models that compile cleanly but answer the wrong questions — as every data quality finding in this project demonstrates.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ SLIDE 11 — BENEFITS PER SOURCE ═══════════════════════════════ -->
+  <section class="slide" id="slide-11">
+    <div class="slide-label">Additional Value</div>
+    <h2>What dbt Unlocks When Applied to Every Source</h2>
+    <div class="cols-3" style="margin-top:4px;">
+      <div class="benefit-item">
+        <div class="benefit-icon">🔔</div>
+        <div class="benefit-text">
+          <h3>Automated Data Quality Monitoring</h3>
+          <p>171 tests run on every build. If FMS stops syncing, a test fails — before a wrong number reaches a dashboard. Quality issues become alerts, not surprises.</p>
+        </div>
+      </div>
+      <div class="benefit-item">
+        <div class="benefit-icon">🔐</div>
+        <div class="benefit-text">
+          <h3>PII Management</h3>
+          <p>Subscriber names, phone numbers, and port strings are flagged in the mart YAML. Access control applies at the mart layer — analysts see aggregates, not raw contact data.</p>
+        </div>
+      </div>
+      <div class="benefit-item">
+        <div class="benefit-icon">🔗</div>
+        <div class="benefit-text">
+          <h3>Cross-Source Conformed Dimensions</h3>
+          <p>FMS uses a numeric subscriber ID; Creatio uses a UUID; Odoo uses <code>res_partner.id</code>. A dbt dimension table maps all three — enabling true end-to-end subscriber analytics.</p>
+        </div>
+      </div>
+      <div class="benefit-item">
+        <div class="benefit-icon">🌐</div>
+        <div class="benefit-text">
+          <h3>Environment Separation</h3>
+          <p>Dev, staging, and prod schemas are configuration — not code. Analysts test new metrics in <code>dbt_dev_*</code> without touching the board's live dashboards.</p>
+        </div>
+      </div>
+      <div class="benefit-item">
+        <div class="benefit-icon">⚡</div>
+        <div class="benefit-text">
+          <h3>Incremental Refresh at Scale</h3>
+          <p>Action logs: 39,343 rows. Attendance raw: 141,601 rows. As sources grow to millions, incremental models process only new data — keeping refresh times fast.</p>
+        </div>
+      </div>
+      <div class="benefit-item">
+        <div class="benefit-icon">🚀</div>
+        <div class="benefit-text">
+          <h3>Onboarding in Hours, Not Weeks</h3>
+          <p>Without dbt, mapping 26 useful tables from 1,027 required four weeks of probing. With dbt docs, a new analyst browses the full lineage catalog immediately.</p>
+        </div>
+      </div>
+      <div class="benefit-item">
+        <div class="benefit-icon">📋</div>
+        <div class="benefit-text">
+          <h3>Full Audit Trail</h3>
+          <p>Every metric definition change is a git commit. When a KPI shifts between quarters, the git log shows exactly what changed, when, and who approved it.</p>
+        </div>
+      </div>
+      <div class="benefit-item">
+        <div class="benefit-icon">🤖</div>
+        <div class="benefit-text">
+          <h3>AI and Semantic Layer Ready</h3>
+          <p>Consistent naming and column documentation makes marts directly consumable by LLM analytics tools. Natural-language queries resolve to the same trusted columns every dashboard uses.</p>
+        </div>
+      </div>
+      <div class="benefit-item">
+        <div class="benefit-icon">📈</div>
+        <div class="benefit-text">
+          <h3>Reusable by Every Team</h3>
+          <p>Operations, finance, HR, and CRM teams all read from the same conformed marts. No more each team maintaining their own version of "number of active subscribers."</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ SLIDE 12 — RECOMMENDATION ═══════════════════════════════ -->
+  <section class="slide" id="slide-12">
+    <div class="slide-label">Recommendation</div>
+    <h2>Recommendation: Roll the Pattern to Every Source</h2>
+    <div class="cols-2" style="align-items:start; gap:28px;">
+      <div>
+        <p style="margin-bottom:20px;">The proof of concept demonstrated the complete cycle on one database: systematic probing revealed traps that raw-DB dashboards would have silently reproduced as wrong KPIs. The dbt layered architecture resolved every problem with documented, tested, version-controlled models. The result is a board-ready fact table with 42 dashboard panels — all reading from a single validated source.</p>
+        <div class="step-list">
+          <div class="step-row">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h3>Validate with operations team</h3>
+              <p>Review the field-service fact table KPIs with operations and CC leads. Confirm metric definitions match business understanding before expanding to other domains.</p>
+            </div>
+          </div>
+          <div class="step-row">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h3>Ship the first Grafana board</h3>
+              <p>Publish the 9-tab, 42-panel Grafana dashboard on the validated <code>fct_field_service_work_orders</code> mart. This becomes the single field-operations source of truth.</p>
+            </div>
+          </div>
+          <div class="step-row">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <h3>Expand to next domain: Materials / Finance</h3>
+              <p>Apply the same probe → stage → integrate → mart pattern to <code>stock_valuation_layer</code> and <code>account_move_line</code> to unlock real cost-per-job and revenue analytics.</p>
+            </div>
+          </div>
+          <div class="step-row">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <h3>Begin pattern on Creatio and FMS</h3>
+              <p>Apply the same methodology to the external systems. Build conformed dimensions that link subscriber identity across Creatio UUID, FMS customer ID, and Odoo <code>res_partner</code>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div class="card green-border" style="padding:24px 28px;">
+          <h3 style="font-size:14px; color:var(--accent2); margin-bottom:16px;">The Promise of This Architecture</h3>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; gap:10px; font-size:13px; color:var(--text-dim);"><span style="color:var(--accent2);">✓</span> Every KPI has one authoritative definition, not one per dashboard</div>
+            <div style="display:flex; gap:10px; font-size:13px; color:var(--text-dim);"><span style="color:var(--accent2);">✓</span> Data quality traps documented before they reach the board</div>
+            <div style="display:flex; gap:10px; font-size:13px; color:var(--text-dim);"><span style="color:var(--accent2);">✓</span> Business logic adjustable in one place, instantly everywhere</div>
+            <div style="display:flex; gap:10px; font-size:13px; color:var(--text-dim);"><span style="color:var(--accent2);">✓</span> Cross-system analytics possible for the first time</div>
+            <div style="display:flex; gap:10px; font-size:13px; color:var(--text-dim);"><span style="color:var(--accent2);">✓</span> Every number traceable to its source table and transformation</div>
+            <div style="display:flex; gap:10px; font-size:13px; color:var(--text-dim);"><span style="color:var(--accent2);">✓</span> New analysts productive in hours, not weeks</div>
+          </div>
+        </div>
+        <div class="card" style="border-color:var(--muted); padding:20px 24px;">
+          <h3 style="font-size:13px; margin-bottom:10px;">Scope Already Demonstrated</h3>
+          <div style="display:flex; gap:24px; flex-wrap:wrap;">
+            <div style="text-align:center;">
+              <div class="big-num blue" style="font-size:32px;">1</div>
+              <div class="num-label">DB source<br>(this POC)</div>
+            </div>
+            <div style="text-align:center;">
+              <div class="big-num blue" style="font-size:32px;">30</div>
+              <div class="num-label">dbt models</div>
+            </div>
+            <div style="text-align:center;">
+              <div class="big-num blue" style="font-size:32px;">171</div>
+              <div class="num-label">tests declared</div>
+            </div>
+            <div style="text-align:center;">
+              <div class="big-num green" style="font-size:32px;">42</div>
+              <div class="num-label">dashboard panels<br>on one mart</div>
+            </div>
+          </div>
+        </div>
+        <div class="blockquote" style="font-size:13px;">
+          The cost of building the dbt layer is paid once. The cost of not building it — wrong KPIs, duplicate logic, silent data traps, slow onboarding — is paid on every dashboard, every sprint, every board meeting.
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div><!-- /#deck -->
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total = slides.length;
+  let current = 0;
+
+  const progressBar = document.getElementById('progress-bar');
+  const counter     = document.getElementById('counter');
+  const dotsEl      = document.getElementById('dots');
+  const prevBtn     = document.getElementById('prev-btn');
+  const nextBtn     = document.getElementById('next-btn');
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    d.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(d);
+  });
+
+  function goTo(n) {
+    slides[current].classList.remove('active');
+    dotsEl.children[current].classList.remove('active');
+    current = Math.max(0, Math.min(total - 1, n));
+    slides[current].classList.add('active');
+    dotsEl.children[current].classList.add('active');
+    progressBar.style.width = ((current + 1) / total * 100) + '%';
+    counter.textContent = (current + 1) + ' / ' + total;
+    prevBtn.disabled = current === 0;
+    nextBtn.disabled = current === total - 1;
+    prevBtn.style.opacity = current === 0 ? '0.3' : '1';
+    nextBtn.style.opacity = current === total - 1 ? '0.3' : '1';
+  }
+
+  prevBtn.addEventListener('click', () => goTo(current - 1));
+  nextBtn.addEventListener('click', () => goTo(current + 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); goTo(current + 1); }
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                    { e.preventDefault(); goTo(current - 1); }
+  });
+
+  // Touch/swipe support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) { dx < 0 ? goTo(current + 1) : goTo(current - 1); }
+  });
+
+  // Init
+  goTo(0);
+</script>
+</body>
+</html>
